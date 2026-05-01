@@ -198,9 +198,8 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## 👩‍💻 Author
 
-**Ritika Goyal**
-
-- GitHub: [@RitikaGoyall](https://github.com/RitikaGoyall)
+**Ritika Goyal** - 2210992168
+**Raghav Bhatia** - 2210992118
 
 ---
 
