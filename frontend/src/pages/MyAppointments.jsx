@@ -13,8 +13,16 @@ const MyAppointments = () => {
     const [appointments, setAppointments] = useState([])
     const [payment, setPayment] = useState('')
     const [loading, setLoading] = useState(false)
+    const [upiId, setUpiId] = useState('')
+    const [paymentMethod, setPaymentMethod] = useState('')
+    const [upiError, setUpiError] = useState('')
 
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    const validateUpiId = (upiId) => {
+        const upiRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/;
+        return upiRegex.test(upiId);
+    };
 
   
     const slotDateFormat = (slotDate) => {
@@ -67,12 +75,72 @@ const MyAppointments = () => {
                 try {
                     const { data } = await axios.post(backendUrl + "/api/user/verifyRazorpay", response, { headers: { token } });
                     if (data.success) {
+                        toast.success('Payment completed successfully!')
                         navigate('/my-appointments')
                         getUserAppointments()
+                    } else {
+                        toast.error(data.message || 'Payment verification failed')
                     }
                 } catch (error) {
                     console.log(error)
-                    toast.error(error.message)
+                    toast.error(error.message || 'Payment verification failed')
+                }
+            }
+        };
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+    };
+
+    const initUpiPay = (order, upiId) => {
+        const options = {
+            key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+            amount: order.amount,
+            currency: order.currency,
+            name: 'Appointment Payment',
+            description: "Appointment Payment via UPI",
+            order_id: order.id,
+            receipt: order.receipt,
+            prefill: {
+                vpa: upiId
+            },
+            method: {
+                upi: true
+            },
+            config: {
+                display: {
+                    language: 'en',
+                    hide: [
+                        {
+                            method: 'paylater'
+                        },
+                        {
+                            method: 'card'
+                        },
+                        {
+                            method: 'netbanking'
+                        },
+                        {
+                            method: 'wallet'
+                        }
+                    ]
+                }
+            },
+            handler: async (response) => {
+                try {
+                    const { data } = await axios.post(backendUrl + "/api/user/verifyRazorpay", response, { headers: { token } });
+                    if (data.success) {
+                        toast.success('Payment completed successfully!')
+                        navigate('/my-appointments')
+                        getUserAppointments()
+                        setUpiId('')
+                        setPaymentMethod('')
+                        setPayment('')
+                    } else {
+                        toast.error(data.message || 'Payment verification failed')
+                    }
+                } catch (error) {
+                    console.log(error)
+                    toast.error(error.message || 'Payment verification failed')
                 }
             }
         };
@@ -81,12 +149,16 @@ const MyAppointments = () => {
     };
 
   
-    const appointmentRazorpay = async (appointmentId) => {
+    const appointmentRazorpay = async (appointmentId, method = 'razorpay') => {
         setLoading(true)
         try {
             const { data } = await axios.post(backendUrl + '/api/user/payment-razorpay', { appointmentId }, { headers: { token } })
             if (data.success) {
-                initPay(data.order)
+                if (method === 'upi') {
+                    initUpiPay(data.order, upiId)
+                } else {
+                    initPay(data.order)
+                }
             }else{
                 toast.error(data.message)
             }
@@ -192,13 +264,81 @@ const MyAppointments = () => {
                                         )}
                                         
                                         {!item.cancelled && !item.payment && !item.isCompleted && payment === item._id && (
-                                            <div className='flex gap-2'>
-                                                <button onClick={() => appointmentRazorpay(item._id)} className='px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors flex items-center gap-2'>
-                                                    <img className='h-4' src={assets.razorpay_logo} alt="Razorpay" /> Razorpay
-                                                </button>
-                                                <button onClick={() => appointmentStripe(item._id)} className='px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors flex items-center gap-2'>
-                                                    <img className='h-4' src={assets.stripe_logo} alt="Stripe" /> Stripe
-                                                </button>
+                                            <div className='w-full space-y-3'>
+                                                <div className='flex gap-2'>
+                                                    <button
+                                                        onClick={() => setPaymentMethod('razorpay')}
+                                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                                                            paymentMethod === 'razorpay' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                        }`}
+                                                    >
+                                                        <img className='h-4' src={assets.razorpay_logo} alt="Razorpay" /> Razorpay
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setPaymentMethod('upi')}
+                                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                                                            paymentMethod === 'upi' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                        }`}
+                                                    >
+                                                        💰 UPI ID
+                                                    </button>
+                                                    <button
+                                                        onClick={() => appointmentStripe(item._id)}
+                                                        className='px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors flex items-center gap-2'
+                                                    >
+                                                        <img className='h-4' src={assets.stripe_logo} alt="Stripe" /> Stripe
+                                                    </button>
+                                                </div>
+
+                                                {paymentMethod === 'upi' && (
+                                                    <div className='bg-blue-50 p-3 rounded-lg'>
+                                                        <label className='block text-sm font-medium text-gray-700 mb-2'>
+                                                            Enter your UPI ID
+                                                        </label>
+                                                        <input
+                                                            type='text'
+                                                            value={upiId}
+                                                            onChange={(e) => {
+                                                                setUpiId(e.target.value);
+                                                                if (upiError) setUpiError('');
+                                                            }}
+                                                            onBlur={() => {
+                                                                if (upiId && !validateUpiId(upiId)) {
+                                                                    setUpiError('Please enter a valid UPI ID (e.g., user@bank)');
+                                                                }
+                                                            }}
+                                                            placeholder='example@upi'
+                                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                                                upiError ? 'border-red-300' : 'border-gray-300'
+                                                            }`}
+                                                        />
+                                                        {upiError && (
+                                                            <p className='text-red-500 text-xs mt-1'>{upiError}</p>
+                                                        )}
+                                                        <button
+                                                            onClick={() => {
+                                                                if (!validateUpiId(upiId)) {
+                                                                    setUpiError('Please enter a valid UPI ID (e.g., user@bank)');
+                                                                    return;
+                                                                }
+                                                                appointmentRazorpay(item._id, 'upi');
+                                                            }}
+                                                            disabled={!upiId.trim() || loading || upiError}
+                                                            className='w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+                                                        >
+                                                            {loading ? 'Initiating UPI Payment...' : 'Pay with UPI ID'}
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {paymentMethod === 'razorpay' && (
+                                                    <button
+                                                        onClick={() => appointmentRazorpay(item._id, 'razorpay')}
+                                                        className='w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors'
+                                                    >
+                                                        Proceed with Razorpay
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                         
